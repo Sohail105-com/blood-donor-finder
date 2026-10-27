@@ -1,0 +1,94 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Blood Donor Finder</title>
+<style>
+:root{--r:#b91c1c;--rd:#7f1d1d;--bg:#fff;--s:#fef2f2;--b:#fecaca;--m:#6b7280}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#fafafa;color:#1f2937}
+header{background:var(--rd);color:#fff;padding:14px 20px;display:flex;align-items:center;gap:10px}header b{flex:1;font-size:1.2rem}
+button,input,select{font:inherit;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;background:#fff}button{cursor:pointer}
+.p{background:var(--r);color:#fff;border:0;font-weight:600}.w{background:#ffffff26;color:#fff;border:0}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #f59e0b}
+.hero{background:linear-gradient(135deg,var(--rd),var(--r));color:#fff;padding:36px 20px 70px}.hero h1{margin:0 0 6px;font-size:clamp(1.6rem,4.5vw,2.6rem);max-width:640px}.hero p{margin:0;opacity:.9}
+.wrap{max-width:980px;margin:-48px auto 40px;padding:0 16px}.sb{background:#fff;border-radius:14px;box-shadow:0 8px 30px #0002;padding:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end}
+.sb label{display:grid;gap:4px;font-size:.8rem;color:var(--m)}.chk{display:flex!important;align-items:center;gap:6px;grid-auto-flow:column;justify-content:start}.chk input{width:auto}
+.stats{display:flex;gap:10px;margin:18px 0;flex-wrap:wrap}.stats div{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:10px 16px}.stats b{font-size:1.3rem;color:var(--r);display:block}
+.res{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}.dn{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:16px;display:grid;gap:8px}
+.top{display:flex;gap:12px;align-items:center}.bg{width:52px;height:52px;border-radius:50%;background:var(--r);color:#fff;display:grid;place-items:center;font-weight:800;flex-shrink:0}
+.top small{color:var(--m)}.tag{display:inline-block;padding:2px 10px;border-radius:99px;font-size:.78rem;font-weight:600}.ok{background:#dcfce7;color:#166534}.wt{background:#fef3c7;color:#92400e}.ex{background:var(--s);color:var(--rd)}
+.act{display:flex;gap:8px}.act a,.act button{flex:1;text-align:center;text-decoration:none;padding:9px;border-radius:8px;font-size:.9rem}.cl{background:var(--r);color:#fff}.wa{background:#16a34a;color:#fff}
+.note{font-size:.82rem;color:var(--m);margin-top:20px;line-height:1.5}dialog{border:0;border-radius:14px;padding:22px;width:min(440px,94vw)}dialog::backdrop{background:#0008}
+dialog form{display:grid;gap:10px}dialog label{display:grid;gap:4px;font-size:.82rem;color:var(--m)}.er{color:#b91c1c;font-size:.85rem}
+</style></head><body>
+<header><b>🩸 LifeLink Donors</b><button class="w" id="reg">Become a donor</button></header>
+<section class="hero"><h1>Find a blood donor near you, fast</h1><p>Search by blood group and city. Donors who gave blood in the last 90 days are marked so you contact eligible people first.</p></section>
+<div class="wrap"><div class="sb">
+<label>Blood group needed<select id="bg"><option value="">Any group</option></select></label>
+<label>City<select id="ct"><option value="">All cities</option></select></label>
+<label class="chk"><input type="checkbox" id="cp" checked> Include compatible groups</label>
+<label class="chk"><input type="checkbox" id="el" checked> Eligible donors only</label></div>
+<div class="stats" id="st"></div><div class="res" id="rs" aria-live="polite"></div>
+<p class="note">Data is stored only in your browser. Phone numbers appear after you tap Show contact. Eligibility is a general 90-day guideline: always confirm with a doctor or blood bank before donating. In an emergency, contact your nearest hospital blood bank.</p></div>
+<dialog id="dl"><form id="f" method="dialog"><h3 style="margin:0">Register as a donor</h3>
+<label>Full name<input id="nm" required maxlength="60"></label><label>Phone<input id="ph" required pattern="0[0-9]{10}|[0-9]{4}-[0-9]{7}" placeholder="0300-1234567" title="Format: 0300-1234567"></label>
+<label>Blood group<select id="rg"></select></label><label>City<input id="rc" required maxlength="40" list="cl"></label><datalist id="cl"></datalist>
+<label>Last donation date (leave empty if never)<input id="rd" type="date"></label><div class="er" id="er"></div>
+<div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" id="cx">Cancel</button><button class="p">Register</button></div></form></dialog>
+<script>
+const $=s=>document.querySelector(s),esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const G=['A+','A-','B+','B-','O+','O-','AB+','AB-'],DAY=864e5,GAP=90;
+const CAN={'O-':['O-'],'O+':['O+','O-'],'A-':['A-','O-'],'A+':['A+','A-','O+','O-'],'B-':['B-','O-'],'B+':['B+','B-','O+','O-'],'AB-':['AB-','A-','B-','O-'],'AB+':G};
+let D;try{D=JSON.parse(localStorage.getItem('bd-v2'))}catch{}if(!Array.isArray(D))D=[];
+const save=()=>{try{localStorage.setItem('bd-v2',JSON.stringify(D))}catch{}};
+const days=d=>d?Math.floor((Date.now()-new Date(d))/DAY):null,elig=x=>x.d===''||days(x.d)>=GAP;
+const shown=new Set();
+G.forEach(g=>{$('#bg').append(new Option(g,g));$('#rg').append(new Option(g,g))});
+function cities(){const c=[...new Set(D.map(x=>x.c))].sort(),v=$('#ct').value;$('#ct').innerHTML='<option value="">All cities</option>'+c.map(x=>`<option>${esc(x)}</option>`).join('');$('#ct').value=c.includes(v)?v:'';$('#cl').innerHTML=c.map(x=>`<option value="${esc(x)}">`).join('')}
+function wa(p){const n=p.replace(/\D/g,'').replace(/^0/,'92');return 'https://wa.me/'+n}
+function render(){const g=$('#bg').value,c=$('#ct').value,cp=$('#cp').checked,el=$('#el').checked;
+ const ok=g?(cp?CAN[g]:[g]):G;
+ const L=D.filter(x=>ok.includes(x.g)&&(!c||x.c===c)&&(!el||elig(x))).sort((a,b)=>(b.g===g)-(a.g===g)||elig(b)-elig(a)||a.n.localeCompare(b.n));
+ $('#st').innerHTML=[['Registered donors',D.length],['Eligible now',D.filter(elig).length],['Matches found',L.length]].map(x=>`<div><b>${x[1]}</b>${x[0]}</div>`).join('');
+ $('#rs').innerHTML=L.length?L.map(x=>{const e=elig(x),dd=days(x.d);const next=x.d?new Date(new Date(x.d).getTime()+GAP*DAY).toLocaleDateString():'';
+  return `<div class="dn"><div class="top"><div class="bg">${x.g}</div><div><b>${esc(x.n)}</b><br><small>${esc(x.c)}</small></div></div>
+  <div>${e?'<span class="tag ok">Eligible to donate</span>':`<span class="tag wt">Eligible from ${next}</span>`} ${g&&x.g!==g?'<span class="tag ex">Compatible</span>':''}</div>
+  <small>${x.d?'Last donated '+dd+' days ago':'Has not donated before'}</small>
+  ${shown.has(x.id)?`<div class="act"><a class="cl" href="tel:${esc(x.p)}">Call ${esc(x.p)}</a><a class="wa" href="${wa(x.p)}" target="_blank" rel="noopener">WhatsApp</a></div>`:`<button class="p" data-s="${x.id}">Show contact</button>`}</div>`}).join(''):'<p>Is search ke liye koi donor nahi mila. City ya filters change karo, ya "Include compatible groups" on rakho.</p>';
+ document.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{shown.add(+b.dataset.s);render()})}
+['bg','ct','cp','el'].forEach(i=>$('#'+i).onchange=render);
+$('#reg').onclick=()=>{$('#er').textContent='';$('#rd').max=new Date().toISOString().slice(0,10);$('#dl').showModal()};$('#cx').onclick=()=>$('#dl').close();
+$('#f').onsubmit=e=>{const p=$('#ph').value.trim();if(D.some(x=>x.p===p)){e.preventDefault();$('#er').textContent='This phone number is already registered.';return}
+ D.push({id:Math.max(0,...D.map(x=>x.id))+1,n:$('#nm').value.trim(),g:$('#rg').value,c:$('#rc').value.trim(),p,d:$('#rd').value});save();$('#f').reset();cities();render()};
+cities();render();
+</script>
+<script>
+(()=>{const P={"k": "blood", "t": "LifeLink Donors", "c": "#b91c1c", "bg": "#7f1d1d"};
+const AK='auth2-'+P.k,SK='sess-'+P.k,$=s=>document.querySelector(s);
+const st=document.createElement('style');
+st.textContent=`#lgo{position:fixed;inset:0;z-index:9999;background:${P.bg};display:flex;align-items:center;justify-content:center;padding:16px;font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+#lgo[hidden]{display:none}#lgo form{background:#fff;color:#1f2937;width:min(380px,100%);border-radius:16px;padding:28px;display:grid;gap:12px;box-shadow:0 20px 60px #0006}
+#lgo h1{margin:0;font-size:1.4rem}#lgo p{margin:0;color:#6b7280;font-size:.9rem}#lgo label{display:grid;gap:4px;font-size:.82rem;color:#6b7280}
+#lgo input{font:inherit;padding:11px 12px;border:1px solid #d1d5db;border-radius:8px}#lgo input:focus-visible,#lgo button:focus-visible{outline:3px solid #f59e0b}
+#lgo button{font:inherit;font-weight:600;padding:12px;border:0;border-radius:8px;background:${P.c};color:#fff;cursor:pointer}
+#lge{color:#b91c1c;font-size:.85rem;min-height:1.1em}#lgb{position:fixed;left:12px;bottom:12px;z-index:60;font:inherit;font-size:.85rem;padding:7px 12px;border-radius:99px;border:1px solid #0003;background:#fff;color:#111;cursor:pointer;box-shadow:0 2px 8px #0003}`;
+document.head.append(st);
+const o=document.createElement('div');o.id='lgo';o.hidden=true;
+o.innerHTML=`<form id="lgf" autocomplete="on"><h1>${P.t}</h1><p id="lgm"></p>
+<label>Username<input id="lgu" required maxlength="30" autocomplete="username"></label>
+<label>Password<input id="lgp" type="password" required autocomplete="current-password"></label>
+<label id="lgcw">Confirm password<input id="lgc" type="password" minlength="6" autocomplete="new-password"></label>
+<div id="lge" role="alert"></div><button id="lgs"></button></form>`;
+document.body.append(o);
+const lb=document.createElement('button');lb.id='lgb';lb.hidden=true;document.body.append(lb);
+async function h(s){try{const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}catch{let x=5381;for(const c of s)x=(x*33^c.charCodeAt(0))>>>0;return 'f'+x}}
+const get=()=>{try{return JSON.parse(localStorage.getItem(AK))}catch{return null}};const acct=async()=>get()||{u:'admin',h:await h('admin:admin123')};
+const lock=on=>[...document.body.children].forEach(e=>{if(e!==o&&e!==lb&&e.tagName!=='SCRIPT'&&e.tagName!=='STYLE'){on?e.setAttribute('inert',''):e.removeAttribute('inert')}});
+function show(){const a=true;o.hidden=false;lb.hidden=true;lock(true);$('#lgf').reset();$('#lge').textContent='';
+ $('#lgm').textContent=a?'Sign in to continue.':'First time here? Create your admin account.';
+ $('#lgs').textContent=a?'Sign in':'Create account';$('#lgcw').style.display=a?'none':'grid';$('#lgc').required=!a;
+ $('#lgp').autocomplete=a?'current-password':'new-password';setTimeout(()=>$('#lgu').focus(),50)}
+function enter(u){try{sessionStorage.setItem(SK,u)}catch{}o.hidden=true;lock(false);lb.hidden=false;lb.textContent='Logout ('+u+')'}
+$('#lgf').onsubmit=async e=>{e.preventDefault();const u=$('#lgu').value.trim().toLowerCase(),p=$('#lgp').value,a=await acct();if(a.u===u&&a.h===await h(u+':'+p))enter(u);else $('#lge').textContent='Wrong username or password.'};
+lb.onclick=()=>{try{sessionStorage.removeItem(SK)}catch{}show()};
+(async()=>{let s=null;try{s=sessionStorage.getItem(SK)}catch{}const a=await acct();if(s&&a.u===s)enter(s);else show()})();
+})();
+</script>
+</body></html>
